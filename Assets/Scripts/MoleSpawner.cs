@@ -15,6 +15,12 @@ public class MoleSpawner : MonoBehaviour
     public float spawnIntervalMax = 2.2f;
     public float moleStayTime = 1.2f;
 
+    [Header("地鼠层级")]
+    [Tooltip("地鼠使用的排序值：需高于洞口（0），低于锤子（100）")]
+    public int moleSortingOrder = 5;
+
+    private const int DefaultSortingLayerValue = 0; // 本项目都在 Default 排序层
+
     private Coroutine spawnCoroutine;
 
     private void Awake()
@@ -48,14 +54,20 @@ public class MoleSpawner : MonoBehaviour
             int randomIndex = Random.Range(0, holeTransforms.Length);
             Transform selectedHole = holeTransforms[randomIndex];
 
-            // 实例化地鼠
+            // 实例化地鼠，作为洞口的子物体
             GameObject moleObj = Instantiate(molePrefab, selectedHole.position, Quaternion.identity, selectedHole);
             Mole mole = moleObj.GetComponent<Mole>();
-            mole.Show();
+            mole.Setup(DefaultSortingLayerValue, moleSortingOrder);
+            mole.Show(); // 从窗口下方上浮出来
 
             // 停留一段时间隐藏
             yield return new WaitForSeconds(moleStayTime);
-            mole.Hide();
+
+            // 没被打中就先缩回窗口下方，再销毁
+            if (!mole.isHit)
+            {
+                yield return mole.Retreat();
+            }
             Destroy(moleObj);
 
             // 等待下一次生成

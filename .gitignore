@@ -45,6 +45,9 @@
 # Visual Studio cache directory
 .vs/
 
+# WorkBuddy 本地数据（不参与项目版本管理）
+.workbuddy/
+
 # Gradle cache directory
 .gradle/
 

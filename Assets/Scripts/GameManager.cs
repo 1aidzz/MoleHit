@@ -49,6 +49,8 @@ public class GameManager : MonoBehaviour
     public GameState currentState;
     #endregion
 
+    private HammerController hammer;   // 游戏内锤子光标（支持挥动动画）
+
     private void Awake()
     {
         if (instance == null)
@@ -64,8 +66,18 @@ public class GameManager : MonoBehaviour
 
         gameOverPanel.SetActive(false);
         startScreen.SetActive(true);
+        ShowResultBg(false);
 
         Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+
+        // 创建游戏内锤子（复用 hammerCursor 贴图与热点），替代系统光标以支持挥动动画
+        hammer = HammerController.Create(hammerCursor, cursorHotspot);
+
+        // 「游戏设置 / 游戏说明 / 结束游戏」是场景里的真实节点，
+        // 由 Tools → 打地鼠 → 生成开始菜单 UI 生成一次即可；
+        // 没生成过时 StartMenuUI.instance 为空，这里会安静地跳过。
+        CloseStartMenuPanels();
+
         AudioManager.instance.PlayMenuBGM();
     }
 
@@ -98,23 +110,39 @@ public class GameManager : MonoBehaviour
         scoreText.text = "分数：0";
         timeText.text = $"剩余时间：{Mathf.Round(timeLeft)}";
 
+        CloseStartMenuPanels();
+
         gameOverPanel.SetActive(false);
         startScreen.SetActive(false);
+        ShowResultBg(false);
 
         currentState = GameState.Playing;
 
         AudioManager.instance.PlayButtonSound();
         AudioManager.instance.StopBGM();
         AudioManager.instance.PlayGameBGM();
-        Cursor.SetCursor(hammerCursor, cursorHotspot, CursorMode.Auto);
+
+        if (hammer != null) hammer.Show();
+        else Cursor.SetCursor(hammerCursor, cursorHotspot, CursorMode.Auto);
 
         MoleSpawner.instance.StartSpawn();
     }
 
     private void SetResultBackground()
     {
+        if (resultBg == null) return;
         resultBg.sprite = score >= winScoreLine ? winBg : failureBg;
         finalScoreText.text = score >= winScoreLine ? $"恭喜获胜！最终得分：{score}" : $"地鼠们得逞啦！最终得分：{score}";
+    }
+
+    /// <summary>
+    /// 结算背景只在结算时才显示。
+    /// 注意：Image 的 sprite 为 null 时，Unity 会用内置白色纹理填充，
+    /// 于是在赋图之前它会一直是一个白框，必须显式关掉渲染。
+    /// </summary>
+    private void ShowResultBg(bool visible)
+    {
+        if (resultBg != null) resultBg.enabled = visible;
     }
 
     public void GameOver()
@@ -122,6 +150,7 @@ public class GameManager : MonoBehaviour
         currentState = GameState.GameOver;
         MoleSpawner.instance.StopSpawn();
 
+        ShowResultBg(true);
         SetResultBackground();
         gameOverPanel.SetActive(true);
 
@@ -136,20 +165,31 @@ public class GameManager : MonoBehaviour
         }
 
         Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+        if (hammer != null) hammer.Hide();
     }
 
     public void RestartGame()
     {
         gameOverPanel.SetActive(false);
         startScreen.SetActive(true);
+        ShowResultBg(false);
+        CloseStartMenuPanels();
 
         AudioManager.instance.PlayButtonSound();
         AudioManager.instance.PlayMenuBGM();
         Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+        if (hammer != null) hammer.Hide();
+    }
+
+    /// <summary>关闭可能还开着的设置/说明面板</summary>
+    private void CloseStartMenuPanels()
+    {
+        if (StartMenuUI.instance != null) StartMenuUI.instance.CloseAll();
     }
 
     private void OnDisable()
     {
         Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+        if (hammer != null) hammer.Hide();
     }
 }

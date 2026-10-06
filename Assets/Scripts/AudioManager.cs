@@ -29,6 +29,10 @@ public class AudioManager : MonoBehaviour
     [Range(0f, 1f)] public float sfxVolume = 0.8f;
     #endregion
 
+    // 设置面板调完音量后会持久化，下次启动自动恢复
+    private const string BgmVolumeKey = "MoleHit.BgmVolume";
+    private const string SfxVolumeKey = "MoleHit.SfxVolume";
+
     private void Awake()
     {
         if (instance == null)
@@ -41,6 +45,10 @@ public class AudioManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
+        // 读取上次保存的音量；没有记录时沿用 Inspector 里的默认值
+        bgmVolume = PlayerPrefs.GetFloat(BgmVolumeKey, bgmVolume);
+        sfxVolume = PlayerPrefs.GetFloat(SfxVolumeKey, sfxVolume);
 
         bgmSource = gameObject.AddComponent<AudioSource>();
         bgmSource.loop = true;
@@ -92,13 +100,41 @@ public class AudioManager : MonoBehaviour
     public void PlayHitSound()
     {
         if (hitSound == null) return;
-        sfxSource.PlayOneShot(hitSound, sfxVolume);
+        // 音量由 sfxSource.volume 统一控制。这里若再乘一次 sfxVolume，
+        // 实际音量会变成 sfxVolume 的平方，滑条调起来手感会很奇怪。
+        sfxSource.PlayOneShot(hitSound, 1f);
     }
 
     public void PlayButtonSound()
     {
         if (buttonSound == null) return;
-        sfxSource.PlayOneShot(buttonSound, sfxVolume);
+        sfxSource.PlayOneShot(buttonSound, 1f);
+    }
+    #endregion
+
+    #region 音量控制方法（供设置面板的滑条调用）
+    public float BgmVolume
+    {
+        get { return bgmVolume; }
+    }
+
+    public float SfxVolume
+    {
+        get { return sfxVolume; }
+    }
+
+    public void SetBgmVolume(float volume)
+    {
+        bgmVolume = Mathf.Clamp01(volume);
+        if (bgmSource != null) bgmSource.volume = bgmVolume;
+        PlayerPrefs.SetFloat(BgmVolumeKey, bgmVolume);
+    }
+
+    public void SetSfxVolume(float volume)
+    {
+        sfxVolume = Mathf.Clamp01(volume);
+        if (sfxSource != null) sfxSource.volume = sfxVolume;
+        PlayerPrefs.SetFloat(SfxVolumeKey, sfxVolume);
     }
     #endregion
 
