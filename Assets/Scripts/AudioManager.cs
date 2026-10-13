@@ -110,6 +110,13 @@ public class AudioManager : MonoBehaviour
         if (buttonSound == null) return;
         sfxSource.PlayOneShot(buttonSound, 1f);
     }
+
+    /// <summary>连杀播报语音（KillAnnouncementManager 调用），与敲击音效同时播放</summary>
+    public void PlayKillVoice(AudioClip clip)
+    {
+        if (clip == null) return;
+        sfxSource.PlayOneShot(clip, 1f);
+    }
     #endregion
 
     #region 音量控制方法（供设置面板的滑条调用）

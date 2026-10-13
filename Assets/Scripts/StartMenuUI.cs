@@ -120,9 +120,9 @@ public class StartMenuUI : MonoBehaviour
 
     public void OpenInfo() { Open(infoPanel, settingsPanel); }
 
-    public void CloseSettings() { SetPanel(settingsPanel, false); PlayButton(); }
+    public void CloseSettings() { SetPanel(settingsPanel, false); }
 
-    public void CloseInfo() { SetPanel(infoPanel, false); PlayButton(); }
+    public void CloseInfo() { SetPanel(infoPanel, false); }
 
     /// <summary>关闭所有开场面板，由 GameManager 在开始游戏/返回菜单时调用</summary>
     public void CloseAll()
@@ -135,7 +135,6 @@ public class StartMenuUI : MonoBehaviour
     {
         SetPanel(other, false);
         SetPanel(target, true);
-        PlayButton();
     }
 
     private static void SetPanel(GameObject panel, bool visible)
@@ -147,7 +146,6 @@ public class StartMenuUI : MonoBehaviour
     #region 结束游戏
     public void QuitGame()
     {
-        PlayButton();
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -208,16 +206,13 @@ public class StartMenuUI : MonoBehaviour
     /// <summary>
     /// 绑定按钮。
     /// 这些按钮是新建的、本身没有任何持久化回调，不存在「一次点击触发两件事」的问题。
+    /// 音效改由光标悬停触发（见 ButtonHoverSound），点击不再额外播放。
     /// </summary>
     private static void Bind(Button button, UnityAction action)
     {
         if (button == null) return;
         button.onClick.AddListener(action);
-    }
-
-    private static void PlayButton()
-    {
-        if (AudioManager.instance != null) AudioManager.instance.PlayButtonSound();
+        ButtonHoverSound.Attach(button);
     }
     #endregion
 }

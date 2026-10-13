@@ -219,7 +219,16 @@ public class Mole : MonoBehaviour
         if (isHit) return;
         isHit = true;
         SetHitActive(false);
+
+        // 命中点爆闪星形特效
+        HitEffect.Spawn(GetWindowCenterWorld());
+
+        // 连杀播报：显示击杀图标 + 播放语音（同时让本局连杀数 +1）
+        KillAnnouncementManager.NotifyKill();
+
+        // 分数按当前连杀倍率结算：连杀越长，单次得分越高
         GameManager.instance.AddScore(10);
+
         Hide();
     }
 

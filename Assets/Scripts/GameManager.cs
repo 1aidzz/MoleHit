@@ -36,6 +36,12 @@ public class GameManager : MonoBehaviour
     public int winScoreLine = 30;
     #endregion
 
+    #region 连杀得分倍率
+    [Header("连杀得分倍率")]
+    [Tooltip("保持连杀时，每连续命中一只地鼠让得分倍率增加的数值（连杀第 1 只倍率为 1，漏掉一只则归 1 重算）")]
+    public float multiplierPerKill = 0.1f;
+    #endregion
+
     #region 鼠标光标设置
     [Header("鼠标光标设置")]
     public Texture2D hammerCursor;
@@ -78,6 +84,8 @@ public class GameManager : MonoBehaviour
         // 没生成过时 StartMenuUI.instance 为空，这里会安静地跳过。
         CloseStartMenuPanels();
 
+        AttachHoverSounds();
+
         AudioManager.instance.PlayMenuBGM();
     }
 
@@ -95,9 +103,23 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 当前得分倍率：连杀第 1 只 = 1，之后每多连一只 +multiplierPerKill。
+    /// 连杀数由 KillAnnouncementManager 统计，漏掉一只地鼠会被清零，倍率随之回到 1。
+    /// </summary>
+    public float ScoreMultiplier
+    {
+        get
+        {
+            int streak = KillAnnouncementManager.KillCount;
+            if (streak <= 1) return 1f;
+            return 1f + (streak - 1) * multiplierPerKill;
+        }
+    }
+
     public void AddScore(int add)
     {
-        score += add;
+        score += Mathf.RoundToInt(add * ScoreMultiplier);
         scoreText.text = $"分数：{score}";
         AudioManager.instance.PlayHitSound();
     }
@@ -118,7 +140,8 @@ public class GameManager : MonoBehaviour
 
         currentState = GameState.Playing;
 
-        AudioManager.instance.PlayButtonSound();
+        KillAnnouncementManager.ResetKills(); // 连杀播报从零开始计
+
         AudioManager.instance.StopBGM();
         AudioManager.instance.PlayGameBGM();
 
@@ -185,6 +208,22 @@ public class GameManager : MonoBehaviour
     private void CloseStartMenuPanels()
     {
         if (StartMenuUI.instance != null) StartMenuUI.instance.CloseAll();
+    }
+
+    /// <summary>
+    /// 给开始界面上的所有按钮挂上「光标悬停即播放音效」的组件。
+    /// 接口用（设置/说明/结束）那几个按钮已由 StartMenuUI 处理，这里主要覆盖「开始游戏」按钮，
+    /// Attach 本身幂等，重复不会挂两次。
+    /// </summary>
+    private void AttachHoverSounds()
+    {
+        if (startScreen == null) return;
+
+        Button[] buttons = startScreen.GetComponentsInChildren<Button>(true);
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            ButtonHoverSound.Attach(buttons[i]);
+        }
     }
 
     private void OnDisable()

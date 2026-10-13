@@ -66,6 +66,8 @@ public class MoleSpawner : MonoBehaviour
             // 没被打中就先缩回窗口下方，再销毁
             if (!mole.isHit)
             {
+                // 漏掉一只地鼠：连杀中断，击杀播报重新从 head shot 开始、得分倍率归 1
+                KillAnnouncementManager.NotifyMiss();
                 yield return mole.Retreat();
             }
             Destroy(moleObj);
