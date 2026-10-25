@@ -22,8 +22,10 @@ public class KillAnnouncementManager : MonoBehaviour
     public static KillAnnouncementManager instance;
 
     [Header("图标显示（世界坐标，正交视口高 10，顶部为 +5、底部为 -5）")]
-    [Tooltip("图标中心点，放在屏幕下方。-3.75 时最高的 head shot 骷髅在弹出放大峰值也完整可见，星形底边与屏幕底边留有空隙")]
-    public Vector2 iconWorldPos = new Vector2(0f, -3.75f);
+    [Tooltip("图标中心点。放在屏幕中上方，避开下方的洞口与地鼠")]
+    public Vector2 iconWorldPos = new Vector2(0f, 3.6f);
+    [Tooltip("图标整体缩放倍数")]
+    public float iconScale = 0.6f;
     [Tooltip("图标弹出用时（秒）")]
     public float popTime = 0.15f;
     [Tooltip("图标停留时长（秒）")]
@@ -99,10 +101,11 @@ public class KillAnnouncementManager : MonoBehaviour
         LoadAssets();
 
         iconRenderer = gameObject.AddComponent<SpriteRenderer>();
-        // 3 = 画在背景(0)与洞口(0)之上、地鼠(5)之下：
-        // 图标在屏幕下方会与洞口区域重叠，压在地鼠之下可确保永远不会挡住地鼠
+        // 图标现在固定显示在屏幕中上方，不会与洞口/地鼠重叠，
+        // 层级只要盖住背景(0)即可，仍留在地鼠(5)之下、锤子(100)之下
         iconRenderer.sortingOrder = 3;
         iconRenderer.enabled = false;
+        iconRenderer.transform.localScale = Vector3.one * Mathf.Max(0.0001f, iconScale);
         transform.position = new Vector3(iconWorldPos.x, iconWorldPos.y, 0f);
     }
 
@@ -163,7 +166,8 @@ public class KillAnnouncementManager : MonoBehaviour
         iconRenderer.enabled = true;
         transform.position = new Vector3(iconWorldPos.x, iconWorldPos.y, 0f);
 
-        // 弹出：0.3 → 1.12 → 1.0 的回弹缩放
+        // 弹出：0.3 → 1.12 → 1.0 的回弹缩放，再乘上整体缩放 iconScale
+        float baseScale = Mathf.Max(0.0001f, iconScale);
         float t = 0f;
         while (t < popTime)
         {
@@ -172,11 +176,11 @@ public class KillAnnouncementManager : MonoBehaviour
             float scale = k < 0.7f
                 ? Mathf.Lerp(0.3f, 1.12f, k / 0.7f)
                 : Mathf.Lerp(1.12f, 1f, (k - 0.7f) / 0.3f);
-            iconRenderer.transform.localScale = Vector3.one * scale;
+            iconRenderer.transform.localScale = Vector3.one * (scale * baseScale);
             iconRenderer.color = Color.white;
             yield return null;
         }
-        iconRenderer.transform.localScale = Vector3.one;
+        iconRenderer.transform.localScale = Vector3.one * baseScale;
         iconRenderer.color = Color.white;
 
         // 停留

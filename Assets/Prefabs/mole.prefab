@@ -376,3 +376,8 @@ MonoBehaviour:
   moveTime: 0.28
   windowSize: 2.4
   hitOnlyWhenFullyOut: 0
+  dizzyTime: 0.5
+  shakeAmplitude: 0.12
+  dizzyRise: 1.9
+  hitSprite: {fileID: 0}
+  hitSpriteScale: 1

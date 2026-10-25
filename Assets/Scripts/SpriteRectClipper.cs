@@ -29,6 +29,14 @@ public class SpriteRectClipper : MonoBehaviour
     private MeshRenderer meshRenderer;
     private GameObject renderObject;
 
+    /// <summary>
+    /// 精灵绘制缩放倍数。1 = 按原始像素/PixelsPerUnit 绘制。
+    /// 换用画布尺寸不同的表情图（比如 380x383 的哭哭脸）时，
+    /// 可以用它把新图放大到和原图一致，而不必去改贴图导入设置。
+    /// 缩放以 pivot 为中心，pivot 与窗口中心重合时图案仍居中。
+    /// </summary>
+    public float spriteScale = 1f;
+
     private readonly Vector3[] vertices = new Vector3[4];
     private readonly Vector2[] uvs = new Vector2[4];
     private readonly int[] triangles = { 0, 1, 2, 0, 2, 3 };
@@ -180,7 +188,11 @@ public class SpriteRectClipper : MonoBehaviour
         float ppu = sourceSprite.pixelsPerUnit;
         Rect r = sourceSprite.rect;        // 贴图上的像素矩形
         Vector2 pivot = sourceSprite.pivot; // 轴心相对该矩形左下角的像素偏移
-        return new Rect(-pivot.x / ppu, -pivot.y / ppu, r.width / ppu, r.height / ppu);
+        float s = Mathf.Max(0.0001f, spriteScale);
+        float w = r.width / ppu * s;
+        float h = r.height / ppu * s;
+        // 缩放以 pivot 为中心：pivot 在本地坐标中始终是 (0,0)
+        return new Rect(-pivot.x / ppu * s, -pivot.y / ppu * s, w, h);
     }
 
     /// <summary>本地坐标点 → 贴图 UV</summary>

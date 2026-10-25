@@ -33,12 +33,42 @@ public class Mole : MonoBehaviour
     public bool hitOnlyWhenFullyOut = true;
     #endregion
 
+    #region 命中眩晕
+    [Header("命中眩晕")]
+    [Tooltip("击中后先左右摇晃并显示头顶眩晕图标的时长（秒），之后再缩回洞口")]
+    public float dizzyTime = 0.5f;
+    [Tooltip("摇晃幅度（局部单位）")]
+    public float shakeAmplitude = 0.12f;
+    [Tooltip("眩晕图标相对地鼠中心上移的高度（世界单位），觉得图标太高/太低就调这个")]
+    public float dizzyRise = 1.9f;
+    #endregion
+
+    #region 受击表情（哭哭脸）
+    [Header("受击表情")]
+    [Tooltip("被打中后换成的哭哭脸。留空则自动读取 Assets/Resources/Mole/mole_hit（不带扩展名）")]
+    public Sprite hitSprite;
+    [Tooltip("哭哭脸大小倍数。1 = 自动缩放成和普通地鼠一样大（推荐），0.8 更小、1.2 更大。\n" +
+             "不需要自己算画布比例：代码会按两张图的实际图案尺寸自动换算")]
+    public float hitSpriteScale = 1f;
+    [Tooltip("哭哭脸图片的 Resources 路径（不要写扩展名）")]
+    public const string HitSpriteResourcePath = "Mole/mole_hit";
+    #endregion
+
     private SpriteRenderer spriteRenderer;
     private SpriteRectClipper clipper;
     private BoxCollider2D hitBox;
     private Vector3 restLocalPos;    // 默认站位
     private Vector3 hiddenLocalPos;  // 藏在窗口下方时的位置
     private Coroutine moveCoroutine;
+
+    // 换表情时要用到：初始化时记下排序与色调
+    private Sprite baseSprite;
+    private Color spriteTint = Color.white;
+    private int spriteSortingLayer;
+    private int spriteSortingOrder;
+
+    private static Sprite cachedHitSprite;
+    private static bool triedLoadHitSprite;
 
     private void Awake()
     {
@@ -66,11 +96,17 @@ public class Mole : MonoBehaviour
         Sprite sprite = spriteRenderer.sprite;
         Color tint = spriteRenderer.color;
 
+        baseSprite = sprite;
+        spriteTint = tint;
+        spriteSortingLayer = sortingLayerValue;
+        spriteSortingOrder = sortingOrder;
+
         if (clipper == null)
         {
             clipper = GetComponent<SpriteRectClipper>();
             if (clipper == null) clipper = gameObject.AddComponent<SpriteRectClipper>();
         }
+        clipper.spriteScale = 1f;
 
         // 只有在裁剪渲染确实搭起来之后才关掉原 SpriteRenderer，
         // 万一初始化失败也还能看见地鼠，不会变成"什么都不显示"
@@ -178,6 +214,7 @@ public class Mole : MonoBehaviour
         RefreshPositions();
         gameObject.SetActive(true);
         isHit = false;
+        RestoreBaseSprite();
         transform.localPosition = hiddenLocalPos;
         UpdateHitBox();
         StopMove();
@@ -219,18 +256,122 @@ public class Mole : MonoBehaviour
         if (isHit) return;
         isHit = true;
         SetHitActive(false);
+        StopMove();
+
+        // 立刻换成哭哭脸，后面摇晃/眩晕都基于这张图
+        ApplyHitFace();
+
+        Vector3 center = GetWindowCenterWorld();
 
         // 命中点爆闪星形特效
-        HitEffect.Spawn(GetWindowCenterWorld());
+        HitEffect.Spawn(center);
+
+        // 头顶眩晕图标（图片来源见 DizzyEffect）
+        DizzyEffect.Spawn(center, dizzyRise);
 
         // 连杀播报：显示击杀图标 + 播放语音（同时让本局连杀数 +1）
         KillAnnouncementManager.NotifyKill();
 
-        // 分数按当前连杀倍率结算：连杀越长，单次得分越高
-        GameManager.instance.AddScore(10);
+        // 分数按当前连杀倍率结算：连杀越长，单次得分越高。
+        // 用返回的实际得分弹「+N」，保证飘字和真实加分一致（含倍率）。
+        int gained = GameManager.instance.AddScore(10);
+        ScorePopup.Spawn(center, gained);
 
+        // 先晕一下再退场，让"打晕"的过程看得见
+        StartCoroutine(DizzyThenHide());
+    }
+
+    /// <summary>左右摇晃一小会儿，然后收进洞口</summary>
+    private IEnumerator DizzyThenHide()
+    {
+        float duration = Mathf.Max(0.05f, dizzyTime);
+        Vector3 start = transform.localPosition;
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float k = Mathf.Clamp01(t / duration);
+            float amp = shakeAmplitude * (1f - k);
+            transform.localPosition = start + Vector3.right * (Mathf.Sin(t * 38f) * amp);
+            yield return null;
+        }
+        transform.localPosition = start;
         Hide();
     }
+
+    #region 受击表情
+    /// <summary>
+    /// 换成哭哭脸。优先级：Mole 上手动指定的 hitSprite → Resources/Mole/mole_hit。
+    /// 两者都没有时安静返回，保持原图。
+    /// </summary>
+    private void ApplyHitFace()
+    {
+        Sprite face = hitSprite != null ? hitSprite : LoadHitSprite();
+        if (face == null) return;
+
+        float autoScale = ComputeHitFaceScale(face);
+
+        if (clipper != null)
+        {
+            clipper.spriteScale = Mathf.Max(0.0001f, autoScale * hitSpriteScale);
+            if (clipper.Setup(face, spriteTint, spriteSortingLayer, spriteSortingOrder))
+            {
+                clipper.SetClipRect(ComputeWindowRect());
+                return;
+            }
+            clipper.spriteScale = 1f;
+        }
+
+        // 没有裁剪器（或重建失败）时直接换原 SpriteRenderer 的图
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.sprite = face;
+            spriteRenderer.enabled = true;
+        }
+    }
+
+    /// <summary>
+    /// 算出"让哭哭脸看起来和普通地鼠一样大"所需的缩放。
+    /// 按两张图实际图案（忽略透明留白）的最长边比例换算，
+    /// 这样无论哭哭脸画布是 380x383 还是 2048x2048 都不用管。
+    /// </summary>
+    private float ComputeHitFaceScale(Sprite face)
+    {
+        if (baseSprite == null) return 1f;
+
+        Vector2 baseSize, baseCenter;
+        Vector2 faceSize, faceCenter;
+        SpriteOpaqueBounds.GetContentRect(baseSprite, out baseSize, out baseCenter);
+        SpriteOpaqueBounds.GetContentRect(face, out faceSize, out faceCenter);
+
+        float baseExtent = Mathf.Max(baseSize.x, baseSize.y);
+        float faceExtent = Mathf.Max(faceSize.x, faceSize.y);
+        if (faceExtent < 0.0001f) return 1f;
+
+        return baseExtent / faceExtent;
+    }
+
+    private static Sprite LoadHitSprite()
+    {
+        if (!triedLoadHitSprite)
+        {
+            triedLoadHitSprite = true;
+            cachedHitSprite = Resources.Load<Sprite>(HitSpriteResourcePath);
+            if (cachedHitSprite == null)
+                Debug.Log("Mole: 没找到哭哭脸 " + HitSpriteResourcePath + "，被打中时继续显示原图。");
+        }
+        return cachedHitSprite;
+    }
+
+    /// <summary>把地鼠恢复成普通表情（地鼠对象被复用时才会用到，生成器目前每次都是新实例）</summary>
+    private void RestoreBaseSprite()
+    {
+        if (baseSprite == null || clipper == null) return;
+        clipper.spriteScale = 1f;
+        if (clipper.Setup(baseSprite, spriteTint, spriteSortingLayer, spriteSortingOrder))
+            clipper.SetClipRect(ComputeWindowRect());
+    }
+    #endregion
 
     private void StopMove()
     {

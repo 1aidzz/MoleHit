@@ -69,6 +69,7 @@ public class GameManager : MonoBehaviour
 
         scoreText.text = $"分数：{score}";
         timeText.text = $"剩余时间：{Mathf.Round(TotalTime)}";
+        scoreTextBaseColor = scoreText.color;
 
         gameOverPanel.SetActive(false);
         startScreen.SetActive(true);
@@ -86,7 +87,23 @@ public class GameManager : MonoBehaviour
 
         AttachHoverSounds();
 
+        // 把「分数 / 剩余时间」两行文字挂到计分板下（生成计分板时已做好，
+        // 这里兜底旧场景：不挂也行，只是加分的跳动不会带着文字一起动）
+        EnsureScoreBoardParent();
+
         AudioManager.instance.PlayMenuBGM();
+    }
+
+    /// <summary>让分数/时间文字成为计分板的子节点，保留原有位置</summary>
+    private void EnsureScoreBoardParent()
+    {
+        Transform board = FindScoreBoard();
+        if (board == null) return;
+        if (scoreText == null || timeText == null) return;
+        if (scoreText.transform.parent == board) return;
+
+        scoreText.transform.SetParent(board, true);
+        timeText.transform.SetParent(board, true);
     }
 
     void Update()
@@ -117,11 +134,17 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public void AddScore(int add)
+    /// <summary>
+    /// 加分（已含连杀倍率），返回本局实际加了多少分，供加分飘字显示。
+    /// </summary>
+    public int AddScore(int add)
     {
-        score += Mathf.RoundToInt(add * ScoreMultiplier);
+        int gained = Mathf.RoundToInt(add * ScoreMultiplier);
+        score += gained;
         scoreText.text = $"分数：{score}";
         AudioManager.instance.PlayHitSound();
+        PunchScoreBoard();
+        return gained;
     }
 
     public void StartGame()
@@ -209,6 +232,108 @@ public class GameManager : MonoBehaviour
     {
         if (StartMenuUI.instance != null) StartMenuUI.instance.CloseAll();
     }
+
+    #region 计分板反馈
+
+    private Coroutine boardPunch;
+    private Color scoreTextBaseColor = Color.black;
+
+    /// <summary>
+    /// 加分时让左上角计分板轻轻"跳"一下，再闪一下颜色。
+    /// 缩放的是整块底板（文字是它的子节点，会一起动），所以对齐不会错。
+    /// </summary>
+    private void PunchScoreBoard()
+    {
+        if (boardPunch != null) StopCoroutine(boardPunch);
+        boardPunch = StartCoroutine(PunchScoreBoardRoutine());
+    }
+
+    private System.Collections.IEnumerator PunchScoreBoardRoutine()
+    {
+        Transform board = FindScoreBoard();
+        if (board == null)
+        {
+            // 没有底板时退回只闪文字颜色
+            yield return FlashScoreText();
+            yield break;
+        }
+
+        Color flash = new Color(1f, 0.55f, 0.10f);
+
+        float up = 0.09f;
+        float down = 0.20f;
+
+        float t = 0f;
+        while (t < up)
+        {
+            t += Time.deltaTime;
+            float k = Mathf.Clamp01(t / up);
+            board.localScale = Vector3.one * Mathf.Lerp(1f, 1.07f, k);
+            scoreText.color = Color.Lerp(scoreTextBaseColor, flash, k);
+            yield return null;
+        }
+
+        t = 0f;
+        while (t < down)
+        {
+            t += Time.deltaTime;
+            float k = Mathf.Clamp01(t / down);
+            board.localScale = Vector3.one * Mathf.Lerp(1.07f, 1f, k);
+            scoreText.color = Color.Lerp(flash, scoreTextBaseColor, k);
+            yield return null;
+        }
+
+        board.localScale = Vector3.one;
+        scoreText.color = scoreTextBaseColor;
+        boardPunch = null;
+    }
+
+    /// <summary>
+    /// 找左上角的计分板节点。
+    /// 不假设 ScoreText 一定是它的子节点（场景没重新生成时两者是兄弟），
+    /// 所以从 ScoreText 往上找到 Canvas 再往下搜一次。
+    /// </summary>
+    private Transform FindScoreBoard()
+    {
+        if (scoreText == null) return null;
+
+        // 正常情况下文字就挂在底板下面
+        Transform parent = scoreText.transform.parent;
+        if (parent != null && parent.name == "ScoreBoard") return parent;
+
+        Transform root = scoreText.transform;
+        while (root.parent != null) root = root.parent;
+
+        Transform[] all = root.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < all.Length; i++)
+            if (all[i] != null && all[i].name == "ScoreBoard") return all[i];
+
+        return null;
+    }
+
+    private System.Collections.IEnumerator FlashScoreText()
+    {
+        Color flash = new Color(1f, 0.55f, 0.10f);
+
+        float t = 0f;
+        while (t < 0.09f)
+        {
+            t += Time.deltaTime;
+            scoreText.color = Color.Lerp(scoreTextBaseColor, flash, Mathf.Clamp01(t / 0.09f));
+            yield return null;
+        }
+        t = 0f;
+        while (t < 0.20f)
+        {
+            t += Time.deltaTime;
+            scoreText.color = Color.Lerp(flash, scoreTextBaseColor, Mathf.Clamp01(t / 0.20f));
+            yield return null;
+        }
+        scoreText.color = scoreTextBaseColor;
+        boardPunch = null;
+    }
+
+    #endregion
 
     /// <summary>
     /// 给开始界面上的所有按钮挂上「光标悬停即播放音效」的组件。
