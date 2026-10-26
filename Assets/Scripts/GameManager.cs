@@ -171,6 +171,9 @@ public class GameManager : MonoBehaviour
         if (hammer != null) hammer.Show();
         else Cursor.SetCursor(hammerCursor, cursorHotspot, CursorMode.Auto);
 
+        // 新一局：把动态难度的滚动统计清零、复位到最简单档（分数已在上方归零）
+        if (DynamicDifficulty.instance != null) DynamicDifficulty.instance.BeginSession();
+
         MoleSpawner.instance.StartSpawn();
     }
 
@@ -195,6 +198,9 @@ public class GameManager : MonoBehaviour
     {
         currentState = GameState.GameOver;
         MoleSpawner.instance.StopSpawn();
+
+        // 停掉难度统计，参数回基准（下一局从简单档重新爬）
+        if (DynamicDifficulty.instance != null) DynamicDifficulty.instance.EndSession();
 
         ShowResultBg(true);
         SetResultBackground();
